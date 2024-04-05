@@ -3,7 +3,6 @@ const { Schema, model } = require("mongoose")
 const ProfileSchema=new Schema({
     ImageId:{
         type: String,
-        
 },
     ImageUrl:{ 
         type:String,

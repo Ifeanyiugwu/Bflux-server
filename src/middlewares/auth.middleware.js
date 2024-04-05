@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 
 exports.userRequired = (req, res, next) =>{
     try {
+        console.log(req.body)
         let token = req.cookie?.bflux;        // to get the cookies
         if(!token) token = req.headers?.authorization?.split(" ")[1];
         if(!token) token = req.headers?.cookie?.split("=")[1];

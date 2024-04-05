@@ -145,7 +145,61 @@ exports.login = async (req, res, next) =>{
             httpOnly: false,
             secure: true,
             samesites: "none",
-            maxAge: 60*60 * 1000
+            // maxAge: 60*60 * 1000
+        })
+
+        res.status(200).json({
+            msg: "login successfully",
+            user:{
+                username: userExist.username,
+                email: userExist.email,
+                firstname: userExist.firstname,
+            },
+            accessToken,
+            refreshToken,
+        })
+    
+    } catch (error){
+        next (error)
+    }
+}
+
+
+
+exports.loginAdmin = async (req, res, next) =>{
+    try{
+        // console.log(req)
+        let token = req.headers?.cookie?.split("=")[1];
+        //const token = req.body
+    const {username, password} = req.body; //d structure
+        if(!username)return res.status(400).json({error:"username is required"});
+        if(!password)return res.status(400).json({error:"password is required"});
+        
+        const userExist = await AccountModel.findOne({username});    //
+        if(!userExist) return next(APIError.notFound("User Not Found")) //return res.status(404).json({error:"user not found"})        
+        // console.log(userExist);
+        
+        const checkUser = compareSync(password,userExist.password)
+        if(!checkUser) return res.status(400).json({error:"incorrect password"})
+        if(userExist.state === "deactivated") return next (APIError.unauthorized("Account has been denied"))
+        
+        if(token)return res.status(403).json({error:"You are already logged in"})
+        //authentication
+    const payload = {
+        id: userExist._id,
+        email:userExist.email,
+        role:userExist.type
+    };
+    const accessToken = jwt.sign(payload,config.ACCESS_TOKEN_SECRET,{expiresIn:"15m"});
+    const refreshToken = jwt.sign(payload,config.ACCESS_TOKEN_SECRET,{expiresIn:"30m"});
+    userExist.refreshToken.push(refreshToken)
+    userExist.save();
+    res.cookie(
+        "bflux", accessToken, {
+            httpOnly: false,
+            secure: true,
+            samesites: "none",
+            // maxAge: 60*60 * 1000
         })
 
         res.status(200).json({
@@ -175,7 +229,7 @@ exports.logout = async (req, res, next) =>{
 
     if(!refreshToken) return res.status(400).json({error: "RefreshToken is Required"})
     if(!token) return res.status(400).json({error: "AccessToken is Required"})
-const checkToken = jwt.decode(token)
+const checkToken = jwt.decode(token, config.ACCESS_TOKEN_SECRET)
     if(!checkToken || checkToken.error) return next(APIError.unauthenticated());
 
     const foundUser = await AccountModel.findOne({refreshToken}).exec();
@@ -204,6 +258,8 @@ res.clearCookie("bflux");
 res
 .status(200)
 .json({succces:true, msg: "You have succesfully logged out"});
+// window.location.href ="./logins.html"
+
     }catch (error){
         next (error)
     }
@@ -212,11 +268,10 @@ res
 
 exports.refreshToken = async (req, res, next) =>{
     try{
-        let token = req.headers?.authorization?.split(" ")[1];
-        // if(!token) token = req.cookie?.bflux;
+        let token = req.cookie?.bflux;
+         if(!token) token = req.headers?.authorization?.split(" ")[1];
         if (!token) token = req.headers?.cookie?.split("=")[1];
         const {refreshToken} = req.body;
-
         if(!refreshToken) return next(APIError.badRequest("RefreshToken is Required"))
         if(!token) return next(APIError.badRequest("AccessToken is Required"));
         const checkToken = jwt.decode(token, config.ACCESS_TOKEN_SECRET);
@@ -231,7 +286,6 @@ exports.refreshToken = async (req, res, next) =>{
                 usedToken.refreshToken = [];
                 usedToken.save();
             });
-            console.log(foundUser);
         return next(APIError.unauthorized("Invalid Refresh Token"));
         }
         const newRefreshTokenArr = foundUser.refreshToken.filter(rt => rt !== refreshToken);
@@ -250,7 +304,7 @@ exports.refreshToken = async (req, res, next) =>{
             role:foundUser.type
         };
         const accessToken = jwt.sign(payload,config.ACCESS_TOKEN_SECRET,{expiresIn:"15m"});
-        const newRefreshToken = jwt.sign(payload,config.ACCESS_TOKEN_SECRET,{expiresIn:"30m"});
+        const newRefreshToken = jwt.sign(payload,config.REFRESH_TOKEN_SECRET,{expiresIn:"30m"});
         foundUser.refreshToken = [...newRefreshTokenArr, newRefreshToken];
         foundUser.save();
         res.cookie();
@@ -300,6 +354,8 @@ exports.uploadPicture = async (req, res, next) => {
     }
   }; 
 
+
+
   exports.updateAccountState = async(req, res, next) =>{
     try{
         const {id, state} = req.body;
@@ -328,5 +384,16 @@ exports.uploadPicture = async (req, res, next) => {
 
     }catch (error) {
      next(error)
+    }
+  }
+
+
+
+  exports.userCheckToken = async (req, res, next) =>{
+    try{
+        res.status(200).json({success: true,
+        msg: "token is valid"})
+    }catch(error){
+        next(error);
     }
   }
